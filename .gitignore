@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Data and models (handled by DVC)
+data/
+*.pt
+*.pth
+*.onnx
+
+# MLflow
+mlruns/
+
+# Environment
+.env
+
+# Testing
+.pytest_cache/
+
+# Build
+dist/
+build/

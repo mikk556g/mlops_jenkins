@@ -1,5 +1,33 @@
-__pycache__
+# Git and DVC
+.git/
+.dvc/
+*.dvc
+
+# Data (mounted via -v at runtime)
+data/
+
+# Python cache
+__pycache__/
 *.pyc
-.git
-.env
+*.pyo
+
+# MLflow local logs
 mlruns/
+
+# CI/CD
+Jenkinsfile
+.pre-commit-config.yaml
+.secrets.baseline
+.flake8
+
+# Models
+*.pt
+*.pth
+*.onnx
+
+# Environment
+.env
+
+# Misc
+.pytest_cache/
+README.md
