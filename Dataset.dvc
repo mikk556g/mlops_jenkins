@@ -3,4 +3,4 @@ outs:
   size: 208624940
   nfiles: 49780
   hash: md5
-  path: Dataset
+  path: data
