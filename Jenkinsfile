@@ -14,18 +14,18 @@ pipeline {
 
     stages {
 
-        stage('Pull Dataset') {
-            steps {
-                echo "Pulling dataset"
-                sh "docker run --rm -v \$(pwd):/project ghcr.io/iterative/dvc dvc pull"
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 echo "Building docker image"
                 // Installs dependecies and requirements inside the Dockerfile"
                 sh "docker build -t ${IMAGE_NAME}:${COMMIT_HASH} ."
+            }
+        }
+
+        stage('Pull Dataset') {
+            steps {
+                echo "Pulling dataset"
+                sh "docker run --rm -v \$(pwd):/project ${IMAGE_NAME}:${COMMIT_HASH} dvc pull"
             }
         }
 
