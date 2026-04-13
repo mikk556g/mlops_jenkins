@@ -94,22 +94,19 @@ class MockDataset:
     """Minimal re-implementation of CustomDataset
     for testing without real files."""
 
+    def __init__(self, img_paths, img_labels, transform=None):
+        self.img_paths = img_paths
+        self.img_labels = img_labels
+        self.transform = transform
 
-def __init__(self, img_paths, img_labels, transform=None):
-    self.img_paths = img_paths
-    self.img_labels = img_labels
-    self.transform = transform
+    def __len__(self):
+        return len(self.img_labels)
 
-
-def __len__(self):
-    return len(self.img_labels)
-
-
-def __getitem__(self, idx):
-    # Return a dummy tensor instead of loading from disk
-    image = torch.zeros(3, 224, 224)
-    label = torch.tensor(self.img_labels[idx], dtype=torch.long)
-    return image, label
+    def __getitem__(self, idx):
+        # Return a dummy tensor instead of loading from disk
+        image = torch.zeros(3, 224, 224)
+        label = torch.tensor(self.img_labels[idx], dtype=torch.long)
+        return image, label
 
 
 def test_custom_dataset_len():
