@@ -1,42 +1,32 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim 
-import torchvision.models as models
-from torchvision.io import decode_image
 import torchvision.transforms as transforms
-from torchvision.transforms import ToTensor
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import seaborn as sea
 import os
 from PIL import Image
-import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
-from collections import Counter
-from itertools import chain
-from torch.utils.data import WeightedRandomSampler
 import mlflow
 import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 import yaml
 
+mlflow.set_tracking_uri("http://172.24.198.42:5050")
 mlflow.set_experiment("resnet50-emotion-classifier")
 
-with open("test_config.yaml") as f:
+with open("config/test_config.yaml") as f:
     config = yaml.safe_load(f)
 
-dataset_config = config['dataset']
+dataset_config = config["dataset"]
 
-tranforms_config = config['transforms']
+tranforms_config = config["transforms"]
 
-dataset_path = dataset_config['dataset_path']
+dataset_path = dataset_config["dataset_path"]
 
 
-classes_to_idx = config['classes']
-
+classes_to_idx = config["classes"]
 
 
 image_path_list = []
@@ -51,19 +41,31 @@ for class_name, class_idx in classes_to_idx.items():
         image_label_list.append(class_idx)
 
 
+train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(
+    image_path_list,
+    image_label_list,
+    test_size=dataset_config["test_size"],
+    random_state=dataset_config["random_state"],
+)
+train_paths, val_paths, train_labels, val_labels = train_test_split(
+    train_val_paths,
+    train_val_labels,
+    test_size=dataset_config["test_size"],
+    random_state=dataset_config["random_state"],
+)
 
-train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(image_path_list, image_label_list, test_size=dataset_config['test_size'], random_state=dataset_config['random_state'])
-train_paths, val_paths, train_labels, val_labels = train_test_split(train_val_paths, train_val_labels, test_size=dataset_config['test_size'], random_state=dataset_config['random_state'])
 
-
-val_test_transform = transforms.Compose([
-    transforms.Resize(size=tranforms_config['Resize']['size']),
-    transforms.CenterCrop(size=tranforms_config['CenterCrop']['size']),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=tranforms_config['Normalize']['mean'], 
-                         std=tranforms_config['Normalize']['std'])
-    ])
-
+val_test_transform = transforms.Compose(
+    [
+        transforms.Resize(size=tranforms_config["Resize"]["size"]),
+        transforms.CenterCrop(size=tranforms_config["CenterCrop"]["size"]),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=tranforms_config["Normalize"]["mean"],
+            std=tranforms_config["Normalize"]["std"],
+        ),
+    ]
+)
 
 
 class CustomDataset(Dataset):
@@ -83,16 +85,15 @@ class CustomDataset(Dataset):
         return image, label
 
 
+test_set = CustomDataset(test_paths, test_labels, transform=val_test_transform)
 
-test_set = CustomDataset(test_paths, 
-                         test_labels, 
-                         transform=val_test_transform)
-
-test_dataloader = DataLoader(test_set, 
-                             batch_size=config['batch_size'], 
-                             shuffle=config['shuffle'], 
-                             num_workers=config['num_workers'], 
-                             pin_memory=config['pin_memory'])
+test_dataloader = DataLoader(
+    test_set,
+    batch_size=config["batch_size"],
+    shuffle=config["shuffle"],
+    num_workers=config["num_workers"],
+    pin_memory=config["pin_memory"],
+)
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,11 +102,24 @@ print(f"Using device: {device}")
 
 
 with mlflow.start_run(run_name="evaluation"):
-    
+
     client = MlflowClient()
-    latest_version_info = client.get_latest_versions(
-        "resnet50-emotion-classifier", stages=["Staging"])[0]
-    model = mlflow.pytorch.load_model(f"models:/resnet50-emotion-classifier/{latest_version_info.version}")
+
+    versions = client.get_latest_versions(
+        "resnet50-emotion-classifier", stages=["Staging"]
+    )
+    if not versions:
+        raise ValueError("No model in Staging")
+
+    latest_version = versions[0]
+    print(f"loading model version: {latest_version}")
+
+    model = mlflow.pytorch.load_model("models:/resnet50-emotion-classifier/Staging")
+
+    # model_path = "mlruns/1/models/m-fc068ea8c9df49d29d3e2caa02d45fe4/artifacts"
+
+    # model = mlflow.pytorch.load_model(model_path)
+
     model = model.to(device)
     model.eval()
 
@@ -122,10 +136,8 @@ with mlflow.start_run(run_name="evaluation"):
             all_labels.extend(y_test.cpu().numpy())
 
     report = classification_report(
-            all_labels,
-            all_preds,
-            target_names=classes_to_idx.keys(),
-            output_dict=True)
+        all_labels, all_preds, target_names=classes_to_idx.keys(), output_dict=True
+    )
 
     accuracy = report["accuracy"]
 
@@ -133,30 +145,32 @@ with mlflow.start_run(run_name="evaluation"):
 
     print(f"Test Accuracy: {accuracy}")
 
-    if accuracy < config['accuracy_threshold']:
+    if accuracy < config["accuracy_threshold"]:
         raise ValueError("Model performance below threshold!")
     else:
-
         # Promote it to Production and archive existing Production versions
         client.transition_model_version_stage(
             name="resnet50-emotion-classifier",
-            version=latest_version_info.version,
+            version=latest_version.version,
             stage="Production",
-            archive_existing_versions=True
+            archive_existing_versions=True,
         )
-        print(f"Model version {latest_version_info} promoted to Production.")
+        print(f"Model version {latest_version} promoted to Production.")
 
-
-    print(classification_report(
-        all_labels,
-        all_preds,
-        target_names=classes_to_idx.keys()))
+    print(
+        classification_report(all_labels, all_preds, target_names=classes_to_idx.keys())
+    )
 
     cm = confusion_matrix(all_labels, all_preds)
     plt.figure(figsize=(8, 6))
-    sea.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=classes_to_idx.keys(),
-                yticklabels=classes_to_idx.keys())
+    sea.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=classes_to_idx.keys(),
+        yticklabels=classes_to_idx.keys(),
+    )
 
     plt.xlabel("Predicted Label")
     plt.ylabel("True Label")
