@@ -2,7 +2,7 @@ pipeline {
     agent { label 'GPU Worker 1'}
 
     triggers {
-        pollSCM('H/* * 2 * *')  // polls every 2 days
+        pollSCM('H H */2 * *')  // polls every 2 days
     }
 
     environment {
@@ -70,8 +70,8 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 echo "Pushing docker image to registry"
-                sh "docker tag ${IMAGE_NAME}:${COMMIT_HASH} ${DOCKER_REGISTRY_URI}/${IMAGE_NAME}:${COMMIT_HASH}"
-                sh "docker push ${DOCKER_REGISTRY_URI}/${IMAGE_NAME}:${COMMIT_HASH}"
+                sh "docker tag ${IMAGE_NAME}:${COMMIT_HASH} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${COMMIT_HASH}"
+                sh "docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${COMMIT_HASH}"
             }
         }
     }
