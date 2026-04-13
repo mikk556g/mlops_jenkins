@@ -11,3 +11,11 @@ If your registry is plain HTTP (not HTTPS), you need to tell Docker to allow it 
 }
 
 Then restart Docker: sudo systemctl restart docker
+
+
+
+stage('Deploy Model') {
+    steps {
+        sh "docker run --rm ${IMAGE_NAME}:${COMMIT_HASH} python3 deploy.py --mlflow-uri ${MLFLOW_TRACKING_URI}"
+    }
+}
