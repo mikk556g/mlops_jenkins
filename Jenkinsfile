@@ -17,7 +17,7 @@ pipeline {
         stage('Pull Dataset') {
             steps {
                 echo "Pulling dataset"
-                sh "docker run --rm -v \$(pwd):/project iterativeai/dvc dvc pull"
+                sh "docker run --rm -v \$(pwd):/project ghcr.io/iterative/dvc dvc pull"
             }
         }
 
