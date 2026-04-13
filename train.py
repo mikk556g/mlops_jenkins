@@ -314,9 +314,20 @@ with mlflow.start_run(run_name="training"):
 
     # Transition the newly registered model to Staging automatically
     client = MlflowClient()
-    latest_version_info = client.get_latest_versions(
-        "resnet50-emotion-classifier", stages=["None"]
-    )[0]
+
+    for _ in range(5):
+        versions = client.get_latest_versions(
+            "resnet50-emotion-classifier", stages=["None"]
+        )
+        if versions:
+            break
+        time.sleep(2)
+
+    if not versions:
+        raise RuntimeError("Model version not found after 5 retries")
+
+    latest_version_info = versions[0]
+
     client.transition_model_version_stage(
         name="resnet50-emotion-classifier",
         version=latest_version_info.version,
