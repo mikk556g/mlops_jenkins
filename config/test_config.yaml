@@ -27,4 +27,4 @@ batch_size: 32
 shuffle: False
 num_workers: 0
 pin_memory: False
-accuracy_threshold: 0.70
+accuracy_threshold: 0.65

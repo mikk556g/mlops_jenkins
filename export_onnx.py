@@ -5,7 +5,9 @@ from mlflow.tracking import MlflowClient
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
 client = MlflowClient()
 
-model = mlflow.pytorch.load_model("models:/resnet50-emotion-classifier/Production")
+model = mlflow.pytorch.load_model(
+    "models:/resnet50-emotion-classifier/Production", map_location=torch.device("cpu")
+)
 model.eval()
 
 dummy_input = torch.randn(1, 3, 224, 224)
