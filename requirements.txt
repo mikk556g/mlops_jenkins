@@ -7,3 +7,4 @@ seaborn==0.13.2
 pyyaml==6.0.1
 pytest
 thop
+onnx==1.15.0
