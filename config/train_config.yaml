@@ -41,8 +41,8 @@ train:
   batch_size: 32
   epochs: 4
   shuffle: True
-  num_workers: 0
-  pin_memory: False
+  num_workers: 1
+  pin_memory: True
 
   RandomResizedCrop:
     size: 224
@@ -65,9 +65,9 @@ train:
 
 evaluate:
   batch_size: 32
-  num_workers: 0
+  num_workers: 1
   shuffle: False
-  pin_memory: False
+  pin_memory: True
 
   Resize:
     size: 256
