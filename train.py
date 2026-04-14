@@ -152,7 +152,7 @@ val_dataloader = DataLoader(
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+print(f"Using device: {device}", flush=True)
 
 model = ResNet50FineTuned(model_config)
 
@@ -192,7 +192,7 @@ with mlflow.start_run(run_name="training"):
     best_acc = 0.0
     start_time = time.time()
     for epoch in range(epochs):
-        print(f"epoch {epoch+1}/{epochs}")
+        print(f"epoch {epoch+1}/{epochs}", flush=True)
         running_train_loss = 0.0
         running_train_corrects = 0.0
 
@@ -218,7 +218,8 @@ with mlflow.start_run(run_name="training"):
         train_loss_list.append(train_epoch_loss)
         print(
             f"Training loss: {train_epoch_loss:.4f} "
-            f"Training accuracy: {train_epoch_acc:.4f}"
+            f"Training accuracy: {train_epoch_acc:.4f}",
+            flush=True,
         )
 
         mlflow.log_metric("train_epoch_loss", train_epoch_loss, step=epoch)
@@ -247,7 +248,8 @@ with mlflow.start_run(run_name="training"):
 
         print(
             f"Validation loss: {val_epoch_loss:.4f} "
-            f"Validation accuracy: {val_epoch_acc:.4f}"
+            f"Validation accuracy: {val_epoch_acc:.4f}",
+            flush=True,
         )
 
         if val_epoch_acc > best_acc:
@@ -256,7 +258,7 @@ with mlflow.start_run(run_name="training"):
 
     end_time = time.time()
 
-    print(f"Best evaluation accuracy: {best_acc:.4f}")
+    print(f"Best evaluation accuracy: {best_acc:.4f}", flush=True)
 
     mlflow.log_metric("best_val_accuracy", best_acc)
 
@@ -304,7 +306,7 @@ with mlflow.start_run(run_name="training"):
 
     training_duration = (end_time - start_time) / 60
     mlflow.log_metric("training_duration_minutes", training_duration)
-    print(f"Training completed in {training_duration:.2f} minutes")
+    print(f"Training completed in {training_duration:.2f} minutes", flush=True)
 
     mlflow.pytorch.log_model(
         pytorch_model=model,
@@ -334,4 +336,4 @@ with mlflow.start_run(run_name="training"):
         stage="Staging",
         archive_existing_versions=True,  # optional
     )
-    print(f"Model version {latest_version_info.version} moved to Staging.")
+    print(f"Model version {latest_version_info.version} moved to Staging.", flush=True)
