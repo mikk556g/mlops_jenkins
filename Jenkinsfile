@@ -79,6 +79,7 @@ pipeline {
     post {
         always {
             sh "docker rmi ${IMAGE_NAME}:${COMMIT_HASH} || true"
+            sh "docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:${COMMIT_HASH} || true"
             echo 'Pipeline finished!'
         }
 
