@@ -1,9 +1,9 @@
 pipeline {
     agent { label 'GPU Worker 1'}
 
-    triggers {
-        pollSCM('H H */2 * *')  // polls every 2 days
-    }
+    //triggers {
+    //    pollSCM('H H */2 * *')  // polls every 2 days
+    //}
 
     environment {
         IMAGE_NAME = "lam_mlops_image"
