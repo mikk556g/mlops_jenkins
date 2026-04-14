@@ -32,14 +32,14 @@ optimizer:
 scheduler:
   name: OneCycleLR
   max_lr: 0.0001
-  epochs: 4
+  epochs: 6
   pct_start: 0.1
   anneal_strategy: cos
 
 
 train:
   batch_size: 32
-  epochs: 4
+  epochs: 6
   shuffle: True
   num_workers: 1
   pin_memory: True
