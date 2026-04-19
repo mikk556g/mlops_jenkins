@@ -15,6 +15,7 @@ mlruns/
 
 # Environment
 .env
+*.DS_Store
 
 # Testing
 .pytest_cache/
