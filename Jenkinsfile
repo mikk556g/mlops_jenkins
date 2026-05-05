@@ -60,10 +60,19 @@ pipeline {
             }
         }
 
-        stage('Export to ONNX') {
+        stage('Export to ONNX and Quantize Model') {
             steps {
-                echo "Exporting to ONNX"
-                sh "docker run --rm ${IMAGE_NAME}:${COMMIT_HASH} python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI}"
+                echo "Exporting to ONNX and quantizing model to INT8"
+                sh "mkdir -p \$(pwd)/models"
+                sh """
+                    docker run --rm --gpus 1 \
+                    -v \$(pwd)/data:/project/data \
+                    -v \$(pwd)/models:/project/models \
+                    ${IMAGE_NAME}:${COMMIT_HASH} \
+                    bash -c "python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI} && \
+                             python3 generate_calibration.py --data /project/data/train --samples 200 --output /tmp/calibration.cache && \
+                             trtexec --onnx=/project/models/model.onnx --saveEngine=/project/models/model_int8.engine --int8 --calib=/tmp/calibration.cache"
+                """
             }
         }
 

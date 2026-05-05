@@ -15,7 +15,7 @@ dummy_input = torch.randn(1, 3, 224, 224)
 torch.onnx.export(
     model,
     dummy_input,
-    "model.onnx",
+    "/project/models/model.onnx",
     export_params=True,
     opset_version=11,
     input_names=["input"],
@@ -27,6 +27,6 @@ with mlflow.start_run(
         "resnet50-emotion-classifier", stages=["Production"]
     )[0].run_id
 ):
-    mlflow.log_artifact("model.onnx")
+    mlflow.log_artifact("/project/models/model.onnx")
 
 print("ONNX export complete and logged to MLflow")
