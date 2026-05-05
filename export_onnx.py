@@ -27,6 +27,7 @@ with mlflow.start_run(
         "resnet50-emotion-classifier", stages=["Production"]
     )[0].run_id
 ):
+
     mlflow.log_artifact("/project/models/model.onnx")
 
 print("ONNX export complete and logged to MLflow")

@@ -66,12 +66,11 @@ pipeline {
                 sh "mkdir -p \$(pwd)/models"
                 sh """
                     docker run --rm --gpus 1 \
-                    -v \$(pwd)/data:/project/data \
                     -v \$(pwd)/models:/project/models \
                     ${IMAGE_NAME}:${COMMIT_HASH} \
                     bash -c "python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI} && \
-                             python3 generate_calibration.py --data /project/data/train --samples 200 --output /tmp/calibration.cache && \
-                             trtexec --onnx=/project/models/model.onnx --saveEngine=/project/models/model_int8.engine --int8 --calib=/tmp/calibration.cache"
+                             trtexec --onnx=/project/models/model.onnx --saveEngine=/project/models/model_fp16.engine --fp16 && \
+                             python3 log_engine.py --mlflow-uri ${MLFLOW_TRACKING_URI} --engine /project/models/model_fp16.engine"
                 """
             }
         }
