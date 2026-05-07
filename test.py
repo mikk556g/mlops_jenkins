@@ -262,14 +262,19 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
     # ------- PROMOTE BEST MODEL TO PRODUCTION ------- #
     best_model = best_model.to("cpu")
 
-    model_info = mlflow.pytorch.log_model(
+    mlflow.pytorch.log_model(
         best_model,
         artifact_path="model",
         registered_model_name="resnet50-emotion-classifier",
     )
 
     # model_info.registered_model_version is the exact version just created
-    new_version = model_info.registered_model_version
+    run_id = mlflow.active_run().info.run_id
+    results = client.search_model_versions(f"run_id='{run_id}'")
+    if not results:
+        raise RuntimeError(f"No model version found for run_id={run_id}")
+    new_version = results[0].version
+
     print(f"Newly registered model version: {new_version} ({best_type})")
 
     client.transition_model_version_stage(
