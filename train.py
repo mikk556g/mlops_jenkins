@@ -304,11 +304,12 @@ with mlflow.start_run(run_name="training"):
 
     plt.close()
 
-    training_duration = (end_time - start_time) / 60
-    mlflow.log_metric("training_duration_minutes", training_duration)
-    print(f"Training completed in {training_duration:.2f} minutes", flush=True)
+    training_duration = end_time - start_time
+    mlflow.log_metric("training_duration_seconds", training_duration)
+    print(f"Training completed in {training_duration:.2f} seconds", flush=True)
 
-    mlflow.pytorch.log_model(
+    # ------- LOG MODEL AND TRANSITION TO STAGING ------- #
+    model_info = mlflow.pytorch.log_model(
         pytorch_model=model,
         artifact_path="model",
         registered_model_name="resnet50-emotion-classifier",
@@ -317,23 +318,14 @@ with mlflow.start_run(run_name="training"):
     # Transition the newly registered model to Staging automatically
     client = MlflowClient()
 
-    for _ in range(5):
-        versions = client.get_latest_versions(
-            "resnet50-emotion-classifier", stages=["None"]
-        )
-        if versions:
-            break
-        time.sleep(2)
-
-    if not versions:
-        raise RuntimeError("Model version not found after 5 retries")
-
-    latest_version_info = versions[0]
-
     client.transition_model_version_stage(
         name="resnet50-emotion-classifier",
-        version=latest_version_info.version,
+        version=model_info.registered_model_version,  # exact version just created
         stage="Staging",
-        archive_existing_versions=True,  # optional
+        archive_existing_versions=True,
     )
-    print(f"Model version {latest_version_info.version} moved to Staging.", flush=True)
+
+    print(
+        f"Model version {model_info.registered_model_version} moved to Staging.",
+        flush=True,
+    )

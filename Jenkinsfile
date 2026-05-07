@@ -44,9 +44,9 @@ pipeline {
             }
         }
 
-        stage('Evaluate Model') {
+        stage('Evaluate Model in FP32 and FP16') {
             steps {
-                echo "Evaluating model"
+                echo "Evaluating model in FP32 and FP16 and promoting the best version"
                 sh """
                     docker run --rm --gpus 1 \
                     -v \$(pwd)/data:/project/data \
@@ -56,17 +56,13 @@ pipeline {
             }
         }
 
-        stage('Export to ONNX and Quantize Model') {
+        stage('Export to ONNX') {
             steps {
-                echo "Exporting to ONNX and quantizing model to INT8"
-                sh "mkdir -p \$(pwd)/models"
+                echo "Exporting to ONNX"
                 sh """
-                    docker run --rm --gpus 1 \
-                    -v \$(pwd)/models:/project/models \
+                    docker run --rm \
                     ${IMAGE_NAME}:${COMMIT_HASH} \
-                    bash -c "python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI} && \
-                             trtexec --onnx=/project/models/model.onnx --saveEngine=/project/models/model_fp16.engine --fp16 && \
-                             python3 log_engine.py --mlflow-uri ${MLFLOW_TRACKING_URI} --engine /project/models/model_fp16.engine"
+                    python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI}
                 """
             }
         }

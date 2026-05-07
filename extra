@@ -1,0 +1,12 @@
+stage('Export to ONNX and Quantize Model') {
+    steps {
+        echo "Exporting to ONNX and quantizing model to INT8"
+        sh """
+            docker run --rm --gpus 1 \
+            ${IMAGE_NAME}:${COMMIT_HASH} \
+            bash -c "python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI} && \
+                        trtexec --onnx=/project/models/model.onnx --saveEngine=/project/models/model_fp16.engine --fp16 && \
+                        python3 log_engine.py --mlflow-uri ${MLFLOW_TRACKING_URI} --engine /project/models/model_fp16.engine"
+        """
+    }
+}
