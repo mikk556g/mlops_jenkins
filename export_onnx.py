@@ -22,6 +22,7 @@ model = mlflow.pytorch.load_model(
     map_location=torch.device("cpu"),
 )
 model.eval()
+model = model.float()
 
 
 # ------- EXPORT TO ONNX ------- #
