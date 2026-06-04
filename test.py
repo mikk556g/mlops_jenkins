@@ -93,7 +93,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # CarbonTracker setup (2 epochs = FP32 + FP16) 
-tracker = CarbonTracker(epochs=2, log_dir="carbontracker_logs/")
+tracker = CarbonTracker(epochs=2, log_dir="carbontracker_logs/", verbose=0, components="gpu")
 
 
 with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
