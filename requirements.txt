@@ -10,3 +10,4 @@ thop
 onnx==1.15.0
 tensorrt-cu12==10.6.0
 carbontracker
+torchdrift
