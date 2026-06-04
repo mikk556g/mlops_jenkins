@@ -153,9 +153,9 @@ epochs = train_config["epochs"]
 train_loss_list = []
 val_loss_list = []
 
-# ── CarbonTracker setup ──────────────────────────────────────────
-tracker = CarbonTracker(epochs=epochs, log_dir="carbontracker_logs/")
-# ─────────────────────────────────────────────────────────────────
+# CarbonTracker setup
+tracker = CarbonTracker(epochs=epochs, log_dir="carbontracker_logs/", verbose=0, components="gpu")
+
 
 with mlflow.start_run(run_name="training"):
 
