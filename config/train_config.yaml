@@ -41,7 +41,7 @@ train:
   batch_size: 32
   epochs: 4
   shuffle: True
-  num_workers: 1
+  num_workers: 0
   pin_memory: True
 
   RandomResizedCrop:
