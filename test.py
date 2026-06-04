@@ -13,6 +13,7 @@ import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 import yaml
 import time
+from carbontracker.tracker import CarbonTracker
 
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
 mlflow.set_experiment("lam-resnet50-emotion-classifier")
@@ -21,18 +22,12 @@ with open("config/test_config.yaml") as f:
     config = yaml.safe_load(f)
 
 dataset_config = config["dataset"]
-
 tranforms_config = config["transforms"]
-
 dataset_path = dataset_config["dataset_path"]
-
-
 classes_to_idx = config["classes"]
-
 
 image_path_list = []
 image_label_list = []
-
 
 for class_name, class_idx in classes_to_idx.items():
     folder_path = os.path.join(dataset_path, class_name)
@@ -40,7 +35,6 @@ for class_name, class_idx in classes_to_idx.items():
         file_path = os.path.join(folder_path, file)
         image_path_list.append(file_path)
         image_label_list.append(class_idx)
-
 
 train_val_paths, test_paths, train_val_labels, test_labels = train_test_split(
     image_path_list,
@@ -54,7 +48,6 @@ train_paths, val_paths, train_labels, val_labels = train_test_split(
     test_size=dataset_config["test_size"],
     random_state=dataset_config["random_state"],
 )
-
 
 val_test_transform = transforms.Compose(
     [
@@ -96,16 +89,16 @@ test_dataloader = DataLoader(
     pin_memory=config["pin_memory"],
 )
 
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 print(f"Using device: {device}")
 
+# ── CarbonTracker setup (2 epochs = FP32 + FP16) ────────────────
+tracker = CarbonTracker(epochs=2, log_dir="carbontracker_logs/")
+# ─────────────────────────────────────────────────────────────────
 
 with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
 
     client = MlflowClient()
-
     mlflow.log_param("device", str(device))
 
     # ------- FINDING LATEST STAGING MODEL VERSION ------- #
@@ -117,10 +110,11 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
 
     staging_version = staging_versions[0].version
     print(f"Loading Staging model version: {staging_version}")
-
     mlflow.log_param("evaluated_staging_version", staging_version)
 
     # ------- TESTING MODEL IN FP32 ------- #
+    tracker.epoch_start()  # ← CarbonTracker FP32 start
+
     model_32 = mlflow.pytorch.load_model(
         f"models:/resnet50-emotion-classifier/{staging_version}"
     )
@@ -144,9 +138,9 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
     end_time = time.time()
     fp32_inference_duration = end_time - start_time
     mlflow.log_metric("fp32_inference_duration_seconds", fp32_inference_duration)
-    print(
-        f"FP32 inference completed in {fp32_inference_duration:.2f} seconds", flush=True
-    )
+    print(f"FP32 inference completed in {fp32_inference_duration:.2f} seconds", flush=True)
+
+    tracker.epoch_end()  # ← CarbonTracker FP32 slut
 
     report_fp32 = classification_report(
         all_labels_fp32,
@@ -160,14 +154,12 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
 
     for class_name in classes_to_idx.keys():
         mlflow.log_metric(f"fp32_{class_name}_f1", report_fp32[class_name]["f1-score"])
-        mlflow.log_metric(
-            f"fp32_{class_name}_precision", report_fp32[class_name]["precision"]
-        )
-        mlflow.log_metric(
-            f"fp32_{class_name}_recall", report_fp32[class_name]["recall"]
-        )
+        mlflow.log_metric(f"fp32_{class_name}_precision", report_fp32[class_name]["precision"])
+        mlflow.log_metric(f"fp32_{class_name}_recall", report_fp32[class_name]["recall"])
 
-    # ------- TESTING MODEL IN FP16 ------- #
+    #TESTING MODEL IN FP16
+    tracker.epoch_start()  #CarbonTracker FP16 start
+
     model_16 = mlflow.pytorch.load_model(
         f"models:/resnet50-emotion-classifier/{staging_version}"
     )
@@ -191,9 +183,15 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
     end_time = time.time()
     fp16_inference_duration = end_time - start_time
     mlflow.log_metric("fp16_inference_duration_seconds", fp16_inference_duration)
-    print(
-        f"FP16 inference completed in {fp16_inference_duration:.2f} seconds", flush=True
-    )
+    print(f"FP16 inference completed in {fp16_inference_duration:.2f} seconds", flush=True)
+
+    tracker.epoch_end()  # ← CarbonTracker FP16 slut
+
+    tracker.stop()  # ← Gem endelig rapport
+
+    # Log CarbonTracker output til MLflow
+    if os.path.exists("carbontracker_logs/"):
+        mlflow.log_artifacts("carbontracker_logs/", artifact_path="carbontracker")
 
     report_fp16 = classification_report(
         all_labels_fp16,
@@ -207,12 +205,8 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
 
     for class_name in classes_to_idx.keys():
         mlflow.log_metric(f"fp16_{class_name}_f1", report_fp16[class_name]["f1-score"])
-        mlflow.log_metric(
-            f"fp16_{class_name}_precision", report_fp16[class_name]["precision"]
-        )
-        mlflow.log_metric(
-            f"fp16_{class_name}_recall", report_fp16[class_name]["recall"]
-        )
+        mlflow.log_metric(f"fp16_{class_name}_precision", report_fp16[class_name]["precision"])
+        mlflow.log_metric(f"fp16_{class_name}_recall", report_fp16[class_name]["recall"])
 
     # ------- SELECTING THE BEST MODEL ------- #
     threshold = config["accuracy_threshold"]
@@ -249,11 +243,9 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
         xticklabels=classes_to_idx.keys(),
         yticklabels=classes_to_idx.keys(),
     )
-
     plt.xlabel("Predicted Label")
     plt.ylabel("True Label")
     plt.title("Best Model Confusion Matrix")
-
     plt.tight_layout()
     plt.savefig("best_model_confusion_matrix.png")
     mlflow.log_artifact("best_model_confusion_matrix.png")
@@ -268,7 +260,6 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
         registered_model_name="resnet50-emotion-classifier",
     )
 
-    # model_info.registered_model_version is the exact version just created
     run_id = mlflow.active_run().info.run_id
     results = client.search_model_versions(f"run_id='{run_id}'")
     if not results:
@@ -284,7 +275,6 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
         archive_existing_versions=True,
     )
 
-    # Tag the version with evaluation metadata for traceability
     client.set_model_version_tag(
         name="resnet50-emotion-classifier",
         version=new_version,
