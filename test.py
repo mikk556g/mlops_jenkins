@@ -92,16 +92,16 @@ test_dataloader = DataLoader(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# ── CarbonTracker setup (2 epochs = FP32 + FP16) ────────────────
+# CarbonTracker setup (2 epochs = FP32 + FP16) 
 tracker = CarbonTracker(epochs=2, log_dir="carbontracker_logs/")
-# ─────────────────────────────────────────────────────────────────
+
 
 with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
 
     client = MlflowClient()
     mlflow.log_param("device", str(device))
 
-    # ------- FINDING LATEST STAGING MODEL VERSION ------- #
+    # Finding latest staging model version 
     staging_versions = client.get_latest_versions(
         "resnet50-emotion-classifier", stages=["Staging"]
     )
@@ -112,7 +112,7 @@ with mlflow.start_run(run_name="evaluation in FP32 and FP16"):
     print(f"Loading Staging model version: {staging_version}")
     mlflow.log_param("evaluated_staging_version", staging_version)
 
-    # ------- TESTING MODEL IN FP32 ------- #
+    # TESTING MODEL IN FP32
     tracker.epoch_start()  # ← CarbonTracker FP32 start
 
     model_32 = mlflow.pytorch.load_model(
