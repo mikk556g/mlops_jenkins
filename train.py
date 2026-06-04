@@ -15,6 +15,7 @@ import time
 import yaml
 from mlflow.tracking import MlflowClient
 from thop import profile
+from carbontracker.tracker import CarbonTracker
 from src.models.resnet50 import ResNet50FineTuned
 from src.optimizers.adamw import adamw
 from src.schedulers.onecyclelr import onecyclelr
@@ -23,34 +24,22 @@ mlflow.set_tracking_uri("http://172.24.198.42:5050")
 
 mlflow.set_experiment("lam-resnet50-emotion-classifier")
 
-# Enable system metrics monitoring
-# mlflow.config.enable_system_metrics_logging()
-# mlflow.config.set_system_metrics_sampling_interval()
-
-
 with open("config/train_config.yaml") as f:
     config = yaml.safe_load(f)
 
 dataset_config = config["dataset"]
-
 model_config = config["model"]
-
 train_config = config["train"]
-
 optimizer_config = config["optimizer"]
-
 scheduler_config = config["scheduler"]
-
 evaluate_config = config["evaluate"]
 
 dataset_path = dataset_config["dataset_path"]
-
 classes_to_idx = config["classes"]
 
 
 image_path_list = []
 image_label_list = []
-
 
 for class_name, class_idx in classes_to_idx.items():
     folder_path = os.path.join(dataset_path, class_name)
@@ -124,15 +113,12 @@ class CustomDataset(Dataset):
 
 
 train_set = CustomDataset(train_paths, train_labels, transform=train_transform)
-
 val_set = CustomDataset(val_paths, val_labels, transform=val_test_transform)
-
 
 class_counts = Counter(train_labels)
 num_classes = len(classes_to_idx)
 total_samples = len(train_labels)
 weights = [total_samples / (num_classes * class_counts[i]) for i in range(num_classes)]
-
 
 train_dataloader = DataLoader(
     train_set,
@@ -155,29 +141,27 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}", flush=True)
 
 model = ResNet50FineTuned(model_config)
-
 model = model.to(device)
 
 class_weights = torch.tensor(weights, dtype=torch.float).to(device)
-
 criterion = nn.CrossEntropyLoss(weight=class_weights)
-
 optimizer = adamw(model, model_config, optimizer_config)
-
 scheduler = onecyclelr(optimizer, scheduler_config, train_dataloader)
-
 
 epochs = train_config["epochs"]
 
 train_loss_list = []
 val_loss_list = []
 
+# ── CarbonTracker setup ──────────────────────────────────────────
+tracker = CarbonTracker(epochs=epochs, log_dir="carbontracker_logs/")
+# ─────────────────────────────────────────────────────────────────
+
 with mlflow.start_run(run_name="training"):
 
     mlflow.log_param("test_param", 123)
     mlflow.log_metric("test_metric", 0.5)
 
-    # Logging model parameters and flops.
     dummy_input = torch.randn(1, 3, 224, 224).to(device)
     flops, params = profile(model, inputs=(dummy_input,))
     mlflow.log_metric("model_params", params)
@@ -191,7 +175,10 @@ with mlflow.start_run(run_name="training"):
 
     best_acc = 0.0
     start_time = time.time()
+
     for epoch in range(epochs):
+        tracker.epoch_start()  # ← CarbonTracker start
+
         print(f"epoch {epoch+1}/{epochs}", flush=True)
         running_train_loss = 0.0
         running_train_corrects = 0.0
@@ -202,7 +189,6 @@ with mlflow.start_run(run_name="training"):
             y_train = y_train.to(device)
 
             optimizer.zero_grad()
-
             output_train = model(X_train)
             train_loss = criterion(output_train, y_train)
             train_loss.backward()
@@ -256,10 +242,17 @@ with mlflow.start_run(run_name="training"):
             best_acc = val_epoch_acc
             best_model_state = model.state_dict()
 
+        tracker.epoch_end()  # ← CarbonTracker slut
+
+    tracker.stop()  # ← Gem endelig rapport
+
+    # Log CarbonTracker output til MLflow
+    if os.path.exists("carbontracker_logs/"):
+        mlflow.log_artifacts("carbontracker_logs/", artifact_path="carbontracker")
+
     end_time = time.time()
 
     print(f"Best evaluation accuracy: {best_acc:.4f}", flush=True)
-
     mlflow.log_metric("best_val_accuracy", best_acc)
 
     model.load_state_dict(best_model_state)
@@ -282,7 +275,6 @@ with mlflow.start_run(run_name="training"):
     )
 
     accuracy = report["accuracy"]
-
     mlflow.log_metric("final_val_accuracy", accuracy)
 
     print(
@@ -292,34 +284,27 @@ with mlflow.start_run(run_name="training"):
     plt_epochs = range(1, epochs + 1)
     plt.plot(plt_epochs, train_loss_list, label="Train Loss")
     plt.plot(plt_epochs, val_loss_list, label="Validation Loss")
-
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training and Validation Loss")
     plt.legend()
-
     plt.savefig("loss_plot.png", dpi=300, bbox_inches="tight")
-
     mlflow.log_figure(plt.gcf(), "loss_plot.png")
-
     plt.close()
 
     training_duration = end_time - start_time
     mlflow.log_metric("training_duration_seconds", training_duration)
     print(f"Training completed in {training_duration:.2f} seconds", flush=True)
 
-    # ------- LOG MODEL AND TRANSITION TO STAGING ------- #
     mlflow.pytorch.log_model(
         pytorch_model=model,
         artifact_path="model",
         registered_model_name="resnet50-emotion-classifier",
     )
 
-    # Transition the newly registered model to Staging automatically
     client = MlflowClient()
     run_id = mlflow.active_run().info.run_id
 
-    # Find the model version tied to this specific run
     results = client.search_model_versions(f"run_id='{run_id}'")
     if not results:
         raise RuntimeError(f"No model version found for run_id={run_id}")
