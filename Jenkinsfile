@@ -1,7 +1,7 @@
 pipeline {
     agent { label 'GPU Worker 1'}
     triggers {
-        githubPush()
+        pollSCM('H/5 * * * *')
     }
     environment {
         IMAGE_NAME = "lam_mlops_image"
