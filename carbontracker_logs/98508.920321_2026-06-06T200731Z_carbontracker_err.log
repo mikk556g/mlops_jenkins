@@ -1,0 +1,2 @@
+2026-06-06 20:07:31,011 - MainThread - WARNING - No API keys provided. Skipping intensity provider initialization.
+2026-06-06 20:07:31,473 - MainThread - WARNING - No carbon intensity provider specified. Using average carbon intensity for DK: 143.30 gCO2eq/kWh.

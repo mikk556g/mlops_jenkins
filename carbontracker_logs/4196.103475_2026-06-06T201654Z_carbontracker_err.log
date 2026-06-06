@@ -1,0 +1,31 @@
+2026-06-06 20:16:54,368 - MainThread - WARNING - No API keys provided. Skipping intensity provider initialization.
+2026-06-06 20:16:54,835 - MainThread - WARNING - No carbon intensity provider specified. Using average carbon intensity for DK: 143.30 gCO2eq/kWh.
+2026-06-06 20:16:55,222 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,224 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,230 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,230 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,230 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,230 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,230 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:16:55,231 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-06-06 20:18:05,495 - CarbonTrackerThread - CRITICAL - Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.11/site-packages/carbontracker/tracker.py", line 141, in run
+    self._collect_measurements()
+  File "/opt/homebrew/lib/python3.11/site-packages/carbontracker/tracker.py", line 228, in _collect_measurements
+    comp.collect_power_usage(self.epoch_counter)
+  File "/opt/homebrew/lib/python3.11/site-packages/carbontracker/components/component.py", line 159, in collect_power_usage
+    self.power_usages[-1] += self.handler.power_usage()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.11/site-packages/carbontracker/components/apple_silicon/powermetrics.py", line 81, in power_usage
+    output = PowerMetricsUnified.get_output()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.11/site-packages/carbontracker/components/apple_silicon/powermetrics.py", line 20, in get_output
+    PowerMetricsUnified._output = subprocess.check_output(
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/subprocess.py", line 466, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.11/3.11.13/Frameworks/Python.framework/Versions/3.11/lib/python3.11/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['sudo', 'powermetrics', '-n', '1', '-i', '100', '--samplers', 'all']' returned non-zero exit status 1.
+

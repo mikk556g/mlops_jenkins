@@ -296,6 +296,8 @@ with mlflow.start_run(run_name="training"):
     mlflow.log_metric("training_duration_seconds", training_duration)
     print(f"Training completed in {training_duration:.2f} seconds", flush=True)
 
+    mlflow.log_artifact("MODEL_CARD.md")
+
     mlflow.pytorch.log_model(
         pytorch_model=model,
         artifact_path="model",
