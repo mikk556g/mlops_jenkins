@@ -9,7 +9,7 @@ tags:
   - pytorch
   - resnet50
 datasets:
-  - fer2013
+  - fer2013 &  RAF-DB
 metrics:
   - accuracy
 co2_eq_emissions:
