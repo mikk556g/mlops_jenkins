@@ -30,7 +30,7 @@ model-index:
         metrics:
           - type: accuracy
             name: Validation Accuracy
-            value: x
+            value: 0.151
 ---
 
 # Model Card: ResNet50 FER Emotion Classifier
@@ -51,7 +51,8 @@ The model was trained on the FER2013 dataset, a publicly available benchmark dat
 
 - **Dataset:** FER2013
 - **Classes:** Angry, Disgust, Fear, Happy, Neutral, Sad, Surprise
-- **Preprocessing:** Resize to 256px, CenterCrop to 224px, Normalize (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+- **Train preprocessing:** RandomResizedCrop to 224px, RandomHorizontalFlip, RandomRotation, ColorJitter, Normalize (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+- **Val/test preprocessing:** Resize to 256px, CenterCrop to 224px, Normalize (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 - **Split:** 80% training, 20% validation
 
 ## Architecture
