@@ -80,8 +80,8 @@ ResNet50 pre-trained on ImageNet with a replaced classification head:
 |---|---|
 | Validation Accuracy | 69.9% |
 | Training Accuracy | 70.2% |
-| Test Accuracy (FP32) | 70.4% |
-| Test Accuracy (FP16) | 70.3% |
+| Test Accuracy (FP32) | 73.46% |
+| Test Accuracy (FP16) | 73.52% |
 
 ### Inference Benchmarks (NVIDIA RTX 4000 Ada, FP16)
 
