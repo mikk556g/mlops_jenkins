@@ -1,0 +1,11 @@
+[run]
+source = .
+
+[report]
+omit =
+    src/training/data_parallelism.py
+    train.py
+    test.py
+    drift_detection.py
+    export_onnx.py
+    tests/*
