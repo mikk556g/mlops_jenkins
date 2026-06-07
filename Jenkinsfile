@@ -1,4 +1,6 @@
 pipeline {
+    agent any  
+    
     environment {
         IMAGE_NAME = "lam_mlops_image"
         COMMIT_HASH = "${GIT_COMMIT.take(7)}"
