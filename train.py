@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
 from collections import Counter
 import mlflow
 import mlflow.pytorch
@@ -15,9 +14,10 @@ import yaml
 from mlflow.tracking import MlflowClient
 from thop import profile
 from carbontracker.tracker import CarbonTracker
+
 from src.models.resnet50 import ResNet50FineTuned
 from src.optimizers.adamw import adamw
-from src.schedulers.onecyclelr import onecyclelr
+from src.schedulers.reducelronplateau import reducelronplateau
 from src.dataset.dataset import CustomDataset
 
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
@@ -129,22 +129,21 @@ model = model.to(device)
 class_weights = torch.tensor(weights, dtype=torch.float).to(device)
 criterion = nn.CrossEntropyLoss(weight=class_weights)
 optimizer = adamw(model, model_config, optimizer_config)
-scheduler = onecyclelr(optimizer, scheduler_config, train_dataloader)
+scheduler = reducelronplateau(optimizer, scheduler_config)
 
 epochs = train_config["epochs"]
+early_stopping_patience = train_config["early_stopping_patience"]
 
 train_loss_list = []
 val_loss_list = []
 
 # CarbonTracker setup
-tracker = CarbonTracker(epochs=epochs, log_dir="carbontracker_logs/", verbose=0, components="gpu")
+tracker = CarbonTracker(
+    epochs=epochs, log_dir="carbontracker_logs/", verbose=0, components="gpu"
+)
 
 
 with mlflow.start_run(run_name="training"):
-
-    mlflow.log_param("test_param", 123)
-    mlflow.log_metric("test_metric", 0.5)
-
     dummy_input = torch.randn(1, 3, 224, 224).to(device)
     flops, params = profile(model, inputs=(dummy_input,))
     mlflow.log_metric("model_params", params)
@@ -155,10 +154,12 @@ with mlflow.start_run(run_name="training"):
     mlflow.log_param("epochs", epochs)
     mlflow.log_param("optimizer", optimizer_config["name"])
     mlflow.log_param("learning_rate", optimizer_config["lr"])
+    mlflow.log_param("scheduler", scheduler_config["name"])
     mlflow.log_param("amp_enabled", True)
 
     scaler = GradScaler()
-    best_acc = 0.0
+    best_val_loss = float("inf")
+    epochs_no_improve = 0
     start_time = time.time()
 
     for epoch in range(epochs):
@@ -180,7 +181,6 @@ with mlflow.start_run(run_name="training"):
             scaler.scale(train_loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            scheduler.step()
 
             _, preds = torch.max(output_train, 1)
             running_train_corrects += torch.sum(preds == y_train.data).item()
@@ -216,6 +216,8 @@ with mlflow.start_run(run_name="training"):
         val_epoch_loss = running_val_loss / len(val_dataloader)
         val_loss_list.append(val_epoch_loss)
 
+        scheduler.step(val_epoch_loss)
+
         mlflow.log_metric("val_epoch_loss", val_epoch_loss, step=epoch)
         mlflow.log_metric("val_epoch_accuracy", val_epoch_acc, step=epoch)
 
@@ -225,9 +227,16 @@ with mlflow.start_run(run_name="training"):
             flush=True,
         )
 
-        if val_epoch_acc > best_acc:
-            best_acc = val_epoch_acc
-            best_model_state = model.state_dict()
+        if val_epoch_loss < best_val_loss:
+            best_val_loss = val_epoch_loss
+            epochs_no_improve = 0  # Resets early stop counter
+            torch.save(model.state_dict(), "weights_path.pth")
+            print(f" New best loss model saved (val_loss {best_val_loss:.4f})")
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= early_stopping_patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
 
         tracker.epoch_end()  # ← CarbonTracker slut
 
@@ -238,37 +247,12 @@ with mlflow.start_run(run_name="training"):
         mlflow.log_artifacts("carbontracker_logs/", artifact_path="carbontracker")
 
     end_time = time.time()
+    training_duration = end_time - start_time
+    mlflow.log_metric("training_duration_seconds", training_duration)
+    print(f"Training completed in {training_duration:.2f} seconds", flush=True)
 
-    print(f"Best evaluation accuracy: {best_acc:.4f}", flush=True)
-    mlflow.log_metric("best_val_accuracy", best_acc)
-
-    model.load_state_dict(best_model_state)
-    model.eval()
-
-    all_preds = []
-    all_labels = []
-
-    with torch.no_grad():
-        for X_val, y_val in val_dataloader:
-            X_val = X_val.to(device)
-            y_val = y_val.to(device)
-            output = model(X_val)
-            _, preds = torch.max(output, 1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(y_val.cpu().numpy())
-
-    report = classification_report(
-        all_labels, all_preds, target_names=classes_to_idx.keys(), output_dict=True
-    )
-
-    accuracy = report["accuracy"]
-    mlflow.log_metric("final_val_accuracy", accuracy)
-
-    print(
-        classification_report(all_labels, all_preds, target_names=classes_to_idx.keys())
-    )
-
-    plt_epochs = range(1, epochs + 1)
+    # Loss plot
+    plt_epochs = range(1, len(train_loss_list) + 1)
     plt.plot(plt_epochs, train_loss_list, label="Train Loss")
     plt.plot(plt_epochs, val_loss_list, label="Validation Loss")
     plt.xlabel("Epoch")
@@ -279,12 +263,10 @@ with mlflow.start_run(run_name="training"):
     mlflow.log_figure(plt.gcf(), "loss_plot.png")
     plt.close()
 
-    training_duration = end_time - start_time
-    mlflow.log_metric("training_duration_seconds", training_duration)
-    print(f"Training completed in {training_duration:.2f} seconds", flush=True)
-
     mlflow.log_artifact("MODEL_CARD.md")
 
+    # Log model to MLFlow
+    model.load_state_dict(torch.load("weights_path.pth"))
     mlflow.pytorch.log_model(
         pytorch_model=model,
         artifact_path="model",

@@ -30,18 +30,17 @@ optimizer:
 
 
 scheduler:
-  name: OneCycleLR
-  max_lr: 0.0001
-  epochs: 4
-  pct_start: 0.1
-  anneal_strategy: cos
+  name: ReduceLROnPlateau
+  lr_factor: 0.5
+  lr_patience: 5
 
 
 train:
   batch_size: 32
-  epochs: 4
+  epochs: 4 # Early stopping with 50 epochs
+  early_stopping_patience: 15
   shuffle: True
-  num_workers: 0
+  num_workers: 1 # Can set to 4 in AI-Lab, but only 1 in Jenkins-server
   pin_memory: True
 
   RandomResizedCrop:
@@ -78,3 +77,9 @@ evaluate:
   Normalize:
     mean: [0.485, 0.456, 0.406]
     std: [0.229, 0.224, 0.225]
+
+test:
+  batch_size: 32
+  shuffle: False
+  num_workers: 1
+  pin_memory: True
