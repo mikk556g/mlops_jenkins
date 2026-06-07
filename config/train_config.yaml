@@ -37,7 +37,7 @@ scheduler:
 
 train:
   batch_size: 32
-  epochs: 4 # Early stopping with 50 epochs
+  epochs: 50 # Early stopping with 50 epochs
   early_stopping_patience: 15
   shuffle: True
   num_workers: 1 # Can set to 4 in AI-Lab, but only 1 in Jenkins-server
