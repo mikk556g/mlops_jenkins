@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast, GradScaler
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
@@ -172,7 +173,9 @@ with mlflow.start_run(run_name="training"):
     mlflow.log_param("epochs", epochs)
     mlflow.log_param("optimizer", optimizer_config["name"])
     mlflow.log_param("learning_rate", optimizer_config["lr"])
+    mlflow.log_param("amp_enabled", True)
 
+    scaler = GradScaler()
     best_acc = 0.0
     start_time = time.time()
 
@@ -189,10 +192,12 @@ with mlflow.start_run(run_name="training"):
             y_train = y_train.to(device)
 
             optimizer.zero_grad()
-            output_train = model(X_train)
-            train_loss = criterion(output_train, y_train)
-            train_loss.backward()
-            optimizer.step()
+            with autocast():
+                output_train = model(X_train)
+                train_loss = criterion(output_train, y_train)
+            scaler.scale(train_loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
 
             _, preds = torch.max(output_train, 1)
