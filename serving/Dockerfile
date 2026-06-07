@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy model and serving code
-# model.onnx is copied in by Jenkins before docker build
+# model.onnx must be copied into serving/ manually before running docker build (see DEMO.md)
 COPY model.onnx /app/model.onnx
 COPY src/serving/ /app/
 

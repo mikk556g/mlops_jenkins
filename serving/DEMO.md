@@ -2,10 +2,6 @@
 
 The `serving/` directory contains a FastAPI application that serves the trained model via a simple web interface. It is included here as a demonstration and is not part of the automated pipeline.
 
-## Screenshot
-
-*(add screenshot here)*
-
 ## What it does
 
 Upload a face image (JPEG or PNG) and the app returns the predicted emotion along with a confidence score for each of the seven classes: angry, disgust, fear, happy, neutral, sad, surprise.

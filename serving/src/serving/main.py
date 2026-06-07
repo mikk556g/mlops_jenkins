@@ -3,7 +3,6 @@ import numpy as np
 import onnxruntime as ort
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from preprocess import preprocess_image
 
 app = FastAPI()
