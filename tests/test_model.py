@@ -3,6 +3,84 @@ import torch
 
 sys.path.append("src")  # noqa: E402
 from training.model import build_model  # noqa: E402
+from models.resnet50 import ResNet50FineTuned  # noqa: E402
+
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
+BASE_CONFIG = {
+    "name": "resnet50",
+    "num_classes": 7,
+    "pretrained": False,
+    "freeze_layers": ["layer1", "layer2", "layer3"],
+    "dropout_fc1": 0.4,
+    "dropout_fc2": 0.3,
+    "hidden_units": 256,
+}
+
+
+# ── ResNet50FineTuned construction ────────────────────────────────────────────
+
+
+def test_resnet50_builds():
+    """Model should instantiate without errors."""
+    model = ResNet50FineTuned(BASE_CONFIG)
+    assert model is not None
+
+
+def test_resnet50_custom_num_classes():
+    """FC head should output the configured number of classes."""
+    config = {**BASE_CONFIG, "num_classes": 3}
+    model = ResNet50FineTuned(config)
+    x = torch.randn(1, 3, 224, 224)
+    with torch.no_grad():
+        y = model(x)
+    assert y.shape[1] == 3
+
+
+def test_resnet50_frozen_layers():
+    """Layers listed in freeze_layers should have no trainable parameters."""
+    model = ResNet50FineTuned(BASE_CONFIG)
+    for name, param in model.backbone.named_parameters():
+        if any(name.startswith(f"layer{i}") for i in [1, 2, 3]):
+            assert not param.requires_grad, f"{name} should be frozen"
+
+
+def test_resnet50_fc_trainable():
+    """Classifier head should be fully trainable."""
+    model = ResNet50FineTuned(BASE_CONFIG)
+    trainable = [p for p in model.backbone.fc.parameters() if p.requires_grad]
+    assert len(trainable) > 0
+
+
+def test_resnet50_no_freeze():
+    """Model should build when freeze_layers is empty."""
+    config = {**BASE_CONFIG, "freeze_layers": []}
+    model = ResNet50FineTuned(config)
+    assert model is not None
+
+
+# ── ResNet50FineTuned forward pass ────────────────────────────────────────────
+
+
+def test_resnet50_forward_shape():
+    """Forward pass should return (batch_size, num_classes)."""
+    model = ResNet50FineTuned(BASE_CONFIG)
+    model.eval()
+    x = torch.randn(2, 3, 224, 224)
+    with torch.no_grad():
+        y = model(x)
+    assert y.shape == (2, 7)
+
+
+def test_resnet50_forward_returns_tensor():
+    """Forward pass should return a torch.Tensor."""
+    model = ResNet50FineTuned(BASE_CONFIG)
+    model.eval()
+    x = torch.randn(1, 3, 224, 224)
+    with torch.no_grad():
+        y = model(x)
+    assert isinstance(y, torch.Tensor)
 
 
 # Model construction
