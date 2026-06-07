@@ -1,6 +1,5 @@
 import torch
 import torchvision.transforms as transforms
-import torchvision.models as models
 from torch.utils.data import DataLoader
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -8,7 +7,7 @@ import mlflow
 import torchdrift
 import os
 import yaml
-import src.models.resnet50
+from src.models.resnet50 import ResNet50FineTuned
 
 
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
@@ -27,21 +26,25 @@ N_TEST = 50
 P_VALUE_THRESHOLD = 0.05
 
 # Standard transform for calibration and normal test
-normal_transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-])
+normal_transform = transforms.Compose(
+    [
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+)
 
 # Drifted transform: Gaussian blur simulates poor camera quality
-drifted_transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
-    transforms.GaussianBlur(kernel_size=23, sigma=(5.0, 10.0)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-])
+drifted_transform = transforms.Compose(
+    [
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.GaussianBlur(kernel_size=23, sigma=(5.0, 10.0)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+)
 
 image_path_list = []
 image_label_list = []
@@ -70,6 +73,7 @@ train_paths, _, train_labels, _ = train_test_split(
 
 class SimpleDataset(torch.utils.data.Dataset):
     """Loads images from disk and applies a transform."""
+
     def __init__(self, paths, transform):
         self.paths = paths
         self.transform = transform
@@ -94,10 +98,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # ResNet50 without classification head — extracts 2048-dim features per image
-backbone = src.models.resnet50(model_config)
+backbone = ResNet50FineTuned(model_config)
 feature_extractor = torch.nn.Sequential(
-    *list(backbone.children())[:-1],
-    torch.nn.Flatten()
+    *list(backbone.children())[:-1], torch.nn.Flatten()
 )
 feature_extractor = feature_extractor.to(device)
 feature_extractor.eval()
