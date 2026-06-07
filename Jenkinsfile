@@ -3,7 +3,6 @@ pipeline {
     
     environment {
         IMAGE_NAME = "lam_mlops_image"
-        SERVING_IMAGE_NAME = "lam_mlops_serving"
         COMMIT_HASH = "${GIT_COMMIT.take(7)}"
         MLFLOW_TRACKING_URI = "http://172.24.198.42:5050"
         DOCKER_REGISTRY = "172.24.198.42:5000"
@@ -72,23 +71,6 @@ ${IMAGE_NAME}:${COMMIT_HASH} \
 """
             }
         }
-        stage('Build and Push Serving Image') {
-            steps {
-                echo "Building serving image"
-                sh "cp model.onnx serving/"
-                sh "docker build -t ${SERVING_IMAGE_NAME}:${COMMIT_HASH} serving/"
-                sh "docker tag ${SERVING_IMAGE_NAME}:${COMMIT_HASH} ${DOCKER_REGISTRY}/${SERVING_IMAGE_NAME}:${COMMIT_HASH}"
-                sh "docker push ${DOCKER_REGISTRY}/${SERVING_IMAGE_NAME}:${COMMIT_HASH}"
-            }
-        }
-        stage('Deploy Serving Container') {
-            steps {
-                echo "Starting serving container"
-                sh "docker stop fer-demo || true"
-                sh "docker rm fer-demo || true"
-                sh "docker run -d --name fer-demo -p 8000:8000 ${SERVING_IMAGE_NAME}:${COMMIT_HASH}"
-            }
-        }
         stage('Push Docker Image') {
             steps {
                 echo "Pushing docker image to registry"
@@ -101,8 +83,6 @@ ${IMAGE_NAME}:${COMMIT_HASH} \
         always {
             sh "docker rmi ${IMAGE_NAME}:${COMMIT_HASH} || true"
             sh "docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:${COMMIT_HASH} || true"
-            sh "docker rmi ${SERVING_IMAGE_NAME}:${COMMIT_HASH} || true"
-            sh "docker rmi ${DOCKER_REGISTRY}/${SERVING_IMAGE_NAME}:${COMMIT_HASH} || true"
             echo 'Pipeline finished!'
         }
         success {
