@@ -2,11 +2,9 @@ import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast, GradScaler
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
-from PIL import Image
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from collections import Counter
@@ -20,6 +18,7 @@ from carbontracker.tracker import CarbonTracker
 from src.models.resnet50 import ResNet50FineTuned
 from src.optimizers.adamw import adamw
 from src.schedulers.onecyclelr import onecyclelr
+from src.dataset.dataset import CustomDataset
 
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
 
@@ -94,23 +93,6 @@ val_test_transform = transforms.Compose(
         ),
     ]
 )
-
-
-class CustomDataset(Dataset):
-    def __init__(self, img_paths, img_labels, transform=None):
-        self.img_paths = img_paths
-        self.img_labels = img_labels
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.img_labels)
-
-    def __getitem__(self, idx):
-        image = Image.open(self.img_paths[idx]).convert("RGB")
-        label = torch.tensor(self.img_labels[idx], dtype=torch.long)
-        if self.transform:
-            image = self.transform(image)
-        return image, label
 
 
 train_set = CustomDataset(train_paths, train_labels, transform=train_transform)
