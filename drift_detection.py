@@ -8,6 +8,7 @@ import mlflow
 import torchdrift
 import os
 import yaml
+import src.models.resnet50
 
 
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
@@ -19,6 +20,7 @@ with open("config/train_config.yaml") as f:
 dataset_config = config["dataset"]
 classes_to_idx = config["classes"]
 dataset_path = dataset_config["dataset_path"]
+model_config = config["model"]
 
 N_CALIBRATION = 200
 N_TEST = 50
@@ -92,7 +94,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # ResNet50 without classification head — extracts 2048-dim features per image
-backbone = models.resnet50(pretrained=True)
+backbone = src.models.resnet50(model_config)
 feature_extractor = torch.nn.Sequential(
     *list(backbone.children())[:-1],
     torch.nn.Flatten()
