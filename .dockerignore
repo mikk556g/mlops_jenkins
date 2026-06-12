@@ -27,6 +27,7 @@ Jenkinsfile
 
 # Environment
 .env
+*.DS_Store
 
 # Misc
 .pytest_cache/

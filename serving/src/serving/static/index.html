@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Emotion Classifier</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 600px;
+            margin: 60px auto;
+            padding: 0 20px;
+        }
+        h1 { font-size: 1.4rem; margin-bottom: 24px; }
+        input { margin-bottom: 12px; display: block; }
+        button {
+            padding: 8px 20px;
+            cursor: pointer;
+            margin-bottom: 24px;
+        }
+        #result {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 6px;
+        }
+        #result h2 { margin: 0 0 12px 0; font-size: 1.1rem; }
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+        }
+        .bar {
+            height: 6px;
+            background: #ccc;
+            border-radius: 3px;
+            margin-bottom: 8px;
+        }
+        .bar-fill {
+            height: 100%;
+            background: #555;
+            border-radius: 3px;
+        }
+        #result.hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Facial emotion classifier</h1>
+    <input type="file" id="fileInput" accept="image/jpeg, image/png"/>
+    <button onclick="predict()">Predict</button>
+    <div id="result" class="hidden">
+        <h2 id="label"></h2>
+        <div id="scores"></div>
+    </div>
+
+    <script>
+        async function predict() {
+            const file = document.getElementById("fileInput").files[0];
+            if (!file) {
+                alert("Please select an image first");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch("/predict", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) {
+                alert("Prediction failed: " + await response.text());
+                return;
+            }
+
+            const data = await response.json();
+
+            document.getElementById("label").textContent =
+                `${data.label} (${(data.confidence * 100).toFixed(1)}%)`;
+
+            const scoresDiv = document.getElementById("scores");
+            scoresDiv.innerHTML = "";
+
+            const sorted = Object.entries(data.scores)
+                .sort((a, b) => b[1] - a[1]);
+
+            sorted.forEach(([label, prob]) => {
+                scoresDiv.innerHTML += `
+                    <div class="score-row">
+                        <span>${label}</span>
+                        <span>${(prob * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="bar">
+                        <div class="bar-fill" style="width: ${(prob * 100).toFixed(1)}%"></div>
+                    </div>`;
+            });
+
+            document.getElementById("result").classList.remove("hidden");
+        }
+    </script>
+</body>
+</html>

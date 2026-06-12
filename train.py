@@ -1,13 +1,11 @@
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast, GradScaler
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
-from PIL import Image
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
 from collections import Counter
 import mlflow
 import mlflow.pytorch
@@ -15,42 +13,33 @@ import time
 import yaml
 from mlflow.tracking import MlflowClient
 from thop import profile
+from carbontracker.tracker import CarbonTracker
+
 from src.models.resnet50 import ResNet50FineTuned
 from src.optimizers.adamw import adamw
-from src.schedulers.onecyclelr import onecyclelr
+from src.schedulers.reducelronplateau import reducelronplateau
+from src.dataset.dataset import CustomDataset
 
 mlflow.set_tracking_uri("http://172.24.198.42:5050")
 
 mlflow.set_experiment("lam-resnet50-emotion-classifier")
 
-# Enable system metrics monitoring
-# mlflow.config.enable_system_metrics_logging()
-# mlflow.config.set_system_metrics_sampling_interval()
-
-
 with open("config/train_config.yaml") as f:
     config = yaml.safe_load(f)
 
 dataset_config = config["dataset"]
-
 model_config = config["model"]
-
 train_config = config["train"]
-
 optimizer_config = config["optimizer"]
-
 scheduler_config = config["scheduler"]
-
 evaluate_config = config["evaluate"]
 
 dataset_path = dataset_config["dataset_path"]
-
 classes_to_idx = config["classes"]
 
 
 image_path_list = []
 image_label_list = []
-
 
 for class_name, class_idx in classes_to_idx.items():
     folder_path = os.path.join(dataset_path, class_name)
@@ -106,33 +95,13 @@ val_test_transform = transforms.Compose(
 )
 
 
-class CustomDataset(Dataset):
-    def __init__(self, img_paths, img_labels, transform=None):
-        self.img_paths = img_paths
-        self.img_labels = img_labels
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.img_labels)
-
-    def __getitem__(self, idx):
-        image = Image.open(self.img_paths[idx]).convert("RGB")
-        label = torch.tensor(self.img_labels[idx], dtype=torch.long)
-        if self.transform:
-            image = self.transform(image)
-        return image, label
-
-
 train_set = CustomDataset(train_paths, train_labels, transform=train_transform)
-
 val_set = CustomDataset(val_paths, val_labels, transform=val_test_transform)
-
 
 class_counts = Counter(train_labels)
 num_classes = len(classes_to_idx)
 total_samples = len(train_labels)
 weights = [total_samples / (num_classes * class_counts[i]) for i in range(num_classes)]
-
 
 train_dataloader = DataLoader(
     train_set,
@@ -155,29 +124,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}", flush=True)
 
 model = ResNet50FineTuned(model_config)
-
 model = model.to(device)
 
 class_weights = torch.tensor(weights, dtype=torch.float).to(device)
-
 criterion = nn.CrossEntropyLoss(weight=class_weights)
-
 optimizer = adamw(model, model_config, optimizer_config)
-
-scheduler = onecyclelr(optimizer, scheduler_config, train_dataloader)
-
+scheduler = reducelronplateau(optimizer, scheduler_config)
 
 epochs = train_config["epochs"]
+early_stopping_patience = train_config["early_stopping_patience"]
 
 train_loss_list = []
 val_loss_list = []
 
+# CarbonTracker setup
+tracker = CarbonTracker(
+    epochs=epochs, log_dir="carbontracker_logs/", verbose=0, components="gpu"
+)
+
+
 with mlflow.start_run(run_name="training"):
-
-    mlflow.log_param("test_param", 123)
-    mlflow.log_metric("test_metric", 0.5)
-
-    # Logging model parameters and flops.
     dummy_input = torch.randn(1, 3, 224, 224).to(device)
     flops, params = profile(model, inputs=(dummy_input,))
     mlflow.log_metric("model_params", params)
@@ -188,10 +154,17 @@ with mlflow.start_run(run_name="training"):
     mlflow.log_param("epochs", epochs)
     mlflow.log_param("optimizer", optimizer_config["name"])
     mlflow.log_param("learning_rate", optimizer_config["lr"])
+    mlflow.log_param("scheduler", scheduler_config["name"])
+    mlflow.log_param("amp_enabled", True)
 
-    best_acc = 0.0
+    scaler = GradScaler()
+    best_val_loss = float("inf")
+    epochs_no_improve = 0
     start_time = time.time()
+
     for epoch in range(epochs):
+        tracker.epoch_start()  # ← CarbonTracker start
+
         print(f"epoch {epoch+1}/{epochs}", flush=True)
         running_train_loss = 0.0
         running_train_corrects = 0.0
@@ -202,12 +175,12 @@ with mlflow.start_run(run_name="training"):
             y_train = y_train.to(device)
 
             optimizer.zero_grad()
-
-            output_train = model(X_train)
-            train_loss = criterion(output_train, y_train)
-            train_loss.backward()
-            optimizer.step()
-            scheduler.step()
+            with autocast():
+                output_train = model(X_train)
+                train_loss = criterion(output_train, y_train)
+            scaler.scale(train_loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             _, preds = torch.max(output_train, 1)
             running_train_corrects += torch.sum(preds == y_train.data).item()
@@ -243,6 +216,8 @@ with mlflow.start_run(run_name="training"):
         val_epoch_loss = running_val_loss / len(val_dataloader)
         val_loss_list.append(val_epoch_loss)
 
+        scheduler.step(val_epoch_loss)
+
         mlflow.log_metric("val_epoch_loss", val_epoch_loss, step=epoch)
         mlflow.log_metric("val_epoch_accuracy", val_epoch_acc, step=epoch)
 
@@ -252,88 +227,65 @@ with mlflow.start_run(run_name="training"):
             flush=True,
         )
 
-        if val_epoch_acc > best_acc:
-            best_acc = val_epoch_acc
-            best_model_state = model.state_dict()
+        if val_epoch_loss < best_val_loss:
+            best_val_loss = val_epoch_loss
+            epochs_no_improve = 0  # Resets early stop counter
+            torch.save(model.state_dict(), "weights_path.pth")
+            print(f" New best loss model saved (val_loss {best_val_loss:.4f})")
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= early_stopping_patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
+
+        tracker.epoch_end()  # ← CarbonTracker slut
+
+    tracker.stop()  # ← Gem endelig rapport
+
+    # Log CarbonTracker output til MLflow
+    if os.path.exists("carbontracker_logs/"):
+        mlflow.log_artifacts("carbontracker_logs/", artifact_path="carbontracker")
 
     end_time = time.time()
+    training_duration = end_time - start_time
+    mlflow.log_metric("training_duration_seconds", training_duration)
+    print(f"Training completed in {training_duration:.2f} seconds", flush=True)
 
-    print(f"Best evaluation accuracy: {best_acc:.4f}", flush=True)
-
-    mlflow.log_metric("best_val_accuracy", best_acc)
-
-    model.load_state_dict(best_model_state)
-    model.eval()
-
-    all_preds = []
-    all_labels = []
-
-    with torch.no_grad():
-        for X_val, y_val in val_dataloader:
-            X_val = X_val.to(device)
-            y_val = y_val.to(device)
-            output = model(X_val)
-            _, preds = torch.max(output, 1)
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(y_val.cpu().numpy())
-
-    report = classification_report(
-        all_labels, all_preds, target_names=classes_to_idx.keys(), output_dict=True
-    )
-
-    accuracy = report["accuracy"]
-
-    mlflow.log_metric("final_val_accuracy", accuracy)
-
-    print(
-        classification_report(all_labels, all_preds, target_names=classes_to_idx.keys())
-    )
-
-    plt_epochs = range(1, epochs + 1)
+    # Loss plot
+    plt_epochs = range(1, len(train_loss_list) + 1)
     plt.plot(plt_epochs, train_loss_list, label="Train Loss")
     plt.plot(plt_epochs, val_loss_list, label="Validation Loss")
-
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training and Validation Loss")
     plt.legend()
-
     plt.savefig("loss_plot.png", dpi=300, bbox_inches="tight")
-
     mlflow.log_figure(plt.gcf(), "loss_plot.png")
-
     plt.close()
 
-    training_duration = (end_time - start_time) / 60
-    mlflow.log_metric("training_duration_minutes", training_duration)
-    print(f"Training completed in {training_duration:.2f} minutes", flush=True)
+    mlflow.log_artifact("MODEL_CARD.md")
 
+    # Log model to MLFlow
+    model.load_state_dict(torch.load("weights_path.pth"))
     mlflow.pytorch.log_model(
         pytorch_model=model,
         artifact_path="model",
         registered_model_name="resnet50-emotion-classifier",
     )
 
-    # Transition the newly registered model to Staging automatically
     client = MlflowClient()
+    run_id = mlflow.active_run().info.run_id
 
-    for _ in range(5):
-        versions = client.get_latest_versions(
-            "resnet50-emotion-classifier", stages=["None"]
-        )
-        if versions:
-            break
-        time.sleep(2)
-
-    if not versions:
-        raise RuntimeError("Model version not found after 5 retries")
-
-    latest_version_info = versions[0]
+    results = client.search_model_versions(f"run_id='{run_id}'")
+    if not results:
+        raise RuntimeError(f"No model version found for run_id={run_id}")
+    model_version = results[0].version
 
     client.transition_model_version_stage(
         name="resnet50-emotion-classifier",
-        version=latest_version_info.version,
+        version=model_version,
         stage="Staging",
-        archive_existing_versions=True,  # optional
+        archive_existing_versions=True,
     )
-    print(f"Model version {latest_version_info.version} moved to Staging.", flush=True)
+
+    print(f"Model version {model_version} moved to Staging.", flush=True)

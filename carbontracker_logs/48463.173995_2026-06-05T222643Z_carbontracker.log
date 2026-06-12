@@ -1,0 +1,4 @@
+2026-06-05 22:26:43 - carbontracker version 2.4.5
+2026-06-05 22:26:43 - Only predicted and actual consumptions are multiplied by a PUE coefficient of 1.58 (Daniel Bizo, 2023, Uptime Institute Global Data Center Survey).
+2026-06-05 22:26:43 - The following components were found: GPU with device(s) GPU, ANE.
+2026-06-05 22:26:43 - Monitoring thread started.

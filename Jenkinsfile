@@ -44,9 +44,9 @@ pipeline {
             }
         }
 
-        stage('Evaluate Model') {
+        stage('Evaluate Model in FP32 and FP16') {
             steps {
-                echo "Evaluating model"
+                echo "Evaluating model in FP32 and FP16 and promoting the best version"
                 sh """
                     docker run --rm --gpus 1 \
                     -v \$(pwd)/data:/project/data \
@@ -56,10 +56,27 @@ pipeline {
             }
         }
 
+        stage('Drift Detection') {
+            steps {
+                echo "Running drift detection"
+                sh """
+                    docker run --rm --gpus 1 \
+                    -v \$(pwd)/data:/project/data \
+                    ${IMAGE_NAME}:${COMMIT_HASH} \
+                    python3 drift_detection.py
+                """
+            }
+        }
+
         stage('Export to ONNX') {
             steps {
                 echo "Exporting to ONNX"
-                sh "docker run --rm ${IMAGE_NAME}:${COMMIT_HASH} python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI}"
+                sh """
+                    docker run --rm \
+                    -v \$(pwd):/project \
+                    ${IMAGE_NAME}:${COMMIT_HASH} \
+                    python3 export_onnx.py --mlflow-uri ${MLFLOW_TRACKING_URI}
+                """
             }
         }
 
@@ -78,12 +95,10 @@ pipeline {
             sh "docker rmi ${DOCKER_REGISTRY}/${IMAGE_NAME}:${COMMIT_HASH} || true"
             echo 'Pipeline finished!'
         }
-
         success {
             archiveArtifacts artifacts: '**/model_cards/*.md', allowEmptyArchive: true
             echo 'Pipeline succeeded!'
         }
-
         failure {
             echo 'Pipeline failed. Check logs!'
         }
